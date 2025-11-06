@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Persistent Todo PWA</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#4a90e2"> 
+    
+    <style>
+        /* Basic Reset and Body Styling */
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, #a8c0ff, #3f2b96);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        /* Card Styling */
+        .card {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 450px;
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 800;
+            color: #333;
+            margin-bottom: 30px;
+            letter-spacing: 1px;
+        }
+
+        /* Input Section */
+        .input-container {
+            display: flex;
+            margin-bottom: 25px;
+            background: #f0f4f8;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        #todo-input {
+            flex-grow: 1;
+            border: none;
+            padding: 15px 20px;
+            font-size: 16px;
+            background: transparent;
+            outline: none;
+        }
+
+        #add-button {
+            background: #4a90e2;
+            color: white;
+            border: none;
+            width: 50px;
+            font-size: 28px;
+            font-weight: 300;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        #add-button:hover {
+            background: #3c78c0;
+        }
+
+        /* To-do List */
+        #todo-list {
+            list-style: none;
+            padding: 0;
+            margin-bottom: 30px;
+        }
+
+        .todo-item {
+            display: flex;
+            align-items: center;
+            padding: 15px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .todo-item:last-child {
+            border-bottom: none;
+        }
+
+        /* Custom Checkbox Styling */
+        .todo-item input[type="checkbox"] {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #ccc;
+            border-radius: 5px;
+            margin-right: 15px;
+            cursor: pointer;
+            position: relative;
+            outline: none;
+        }
+
+        .todo-item input[type="checkbox"]:checked {
+            border-color: #4a90e2;
+            background-color: #4a90e2;
+        }
+
+        /* Checkmark effect */
+        .todo-item input[type="checkbox"]:checked::after {
+            content: '✓';
+            color: white;
+            font-size: 14px;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .todo-item span {
+            flex-grow: 1;
+            font-size: 16px;
+            color: #444;
+        }
+
+        /* Completed Task Style (Strike-through and grey text) */
+        .todo-item.completed span {
+            text-decoration: line-through;
+            color: #aaa;
+        }
+
+        /* Delete Button */
+        .delete-button {
+            background: none;
+            border: none;
+            color: #ccc;
+            font-size: 18px;
+            cursor: pointer;
+            padding: 5px;
+            transition: color 0.2s;
+            margin-left: 10px;
+        }
+
+        .delete-button:hover {
+            color: #ff6b6b;
+        }
+
+        /* Clear Completed Button */
+        #clear-completed {
+            background: none;
+            border: none;
+            color: #4a90e2;
+            font-size: 14px;
+            cursor: pointer;
+            display: block;
+            margin: 0 auto;
+            padding: 10px;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>YOUR TASKS</h1>
+        <div class="input-container">
+            <input type="text" id="todo-input" placeholder="Add a new todo...">
+            <button id="add-button" aria-label="Add task">+</button>
+        </div>
+
+        <ul id="todo-list">
+            </ul>
+
+        <button id="clear-completed">Clear completed</button>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const todoInput = document.getElementById('todo-input');
+            const addButton = document.getElementById('add-button');
+            const todoList = document.getElementById('todo-list');
+            const clearCompletedButton = document.getElementById('clear-completed');
+            const STORAGE_KEY = 'todoListPWA_tasks';
+
+            // --- PWA Service Worker Registration ---
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                    navigator.serviceWorker.register('sw.js')
+                        .then(reg => console.log('Service Worker registered: ', reg.scope))
+                        .catch(err => console.log('Service Worker registration failed: ', err));
+                });
+            }
+
+            // --- LOCAL STORAGE FUNCTIONS ---
+
+            function saveTasks() {
+                const tasks = [];
+                todoList.querySelectorAll('.todo-item').forEach(li => {
+                    tasks.push({
+                        text: li.querySelector('span').textContent,
+                        completed: li.classList.contains('completed')
+                    });
+                });
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+            }
+
+            function loadTasks() {
+                const storedTasks = localStorage.getItem(STORAGE_KEY);
+                const tasks = storedTasks ? JSON.parse(storedTasks) : [
+                    // Default tasks if storage is empty
+                    { text: 'Buy groceries', completed: true },
+                    { text: 'Finish project report', completed: false },
+                    { text: 'Call doctor', completed: false }
+                ];
+
+                todoList.innerHTML = ''; 
+
+                tasks.forEach(task => {
+                    const itemElement = createTodoItemElement(task.text, task.completed);
+                    todoList.appendChild(itemElement);
+                });
+            }
+
+
+            // --- CORE TODO APP FUNCTIONS ---
+
+            function createTodoItemElement(text, isCompleted = false) {
+                const li = document.createElement('li');
+                li.classList.add('todo-item');
+                if (isCompleted) {
+                    li.classList.add('completed');
+                }
+
+                li.innerHTML = `
+                    <input type="checkbox" ${isCompleted ? 'checked' : ''}>
+                    <span>${text}</span>
+                    <button class="delete-button" aria-label="Delete task">🗑️</button>
+                `;
+
+                // Attach event listeners for dynamic items
+                const checkbox = li.querySelector('input[type="checkbox"]');
+                checkbox.addEventListener('change', toggleComplete);
+
+                const deleteButton = li.querySelector('.delete-button');
+                deleteButton.addEventListener('click', deleteTask);
+
+                return li;
+            }
+
+            function addTask() {
+                const taskText = todoInput.value.trim();
+                if (taskText !== "") {
+                    const newTodoItem = createTodoItemElement(taskText);
+                    todoList.appendChild(newTodoItem);
+                    todoInput.value = '';
+                    saveTasks(); 
+                }
+            }
+
+            function toggleComplete(event) {
+                const li = event.target.closest('.todo-item');
+                li.classList.toggle('completed');
+                saveTasks(); 
+            }
+
+            function deleteTask(event) {
+                const li = event.target.closest('.todo-item');
+                li.remove();
+                saveTasks(); 
+            }
+
+            function clearCompleted() {
+                const completedItems = todoList.querySelectorAll('.todo-item.completed');
+                completedItems.forEach(item => item.remove());
+                saveTasks(); 
+            }
+
+            // --- Initial Setup and Event Listeners ---
+            
+            // Load tasks from storage when the app starts
+            loadTasks();
+
+            addButton.addEventListener('click', addTask);
+            
+            todoInput.addEventListener('keypress', (event) => {
+                if (event.key === 'Enter') {
+                    addTask();
+                }
+            });
+
+            clearCompletedButton.addEventListener('click', clearCompleted);
+        });
+    </script>
+</body>
+</html>
